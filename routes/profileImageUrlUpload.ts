@@ -30,7 +30,23 @@ module.exports = function profileImageUrlUpload () {
       } catch (e) {
         return res.status(400).send('Invalid image URL')
       }
-      if (!allowedHostnames.includes(parsedUrl.hostname)) {
+      // SSRF hardening: normalize and strictly validate
+      const net = require('net')
+      const normalizedHostname = parsedUrl.hostname.toLowerCase()
+      // Disallow credentials in URL
+      if (parsedUrl.username || parsedUrl.password) {
+        return res.status(400).send('Image URL must not contain credentials')
+      }
+      // Only allow https protocol
+      if (parsedUrl.protocol !== 'https:') {
+        return res.status(400).send('Only HTTPS image URLs are allowed')
+      }
+      // Disallow IP addresses as hostnames
+      if (net.isIP(normalizedHostname)) {
+        return res.status(400).send('Image URL host is not allowed')
+      }
+      // Only allow exact matches to the allow-list
+      if (!allowedHostnames.includes(normalizedHostname)) {
         return res.status(400).send('Image URL host is not allowed')
       }
       if (url.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
